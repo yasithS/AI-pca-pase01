@@ -12,11 +12,11 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def upload_file():
     if request.method == 'POST':
         file = request.files.get('excel_file')
-        if not file and file.filename == '':
+        if not file or file.filename == '':
             print("NO FILE UPLOADED")
             return redirect(request.url)
         
-        file_path = os.path.join(app.config['UPLOAD_FOLEDR'], file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(file_path)
 
         try:
@@ -29,6 +29,9 @@ def upload_file():
         return render_template('columns.html', columns=columns, file_name=file.filename)
     
     return render_template('upload.html')
+
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
