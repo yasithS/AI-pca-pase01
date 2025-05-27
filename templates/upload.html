@@ -4,11 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <style>
+        #upload_id{
+            border: 2px solid gray;
+            height: 30px;
+            width: 300px;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0px auto;
+       
+        }
+    </style>
 </head>
 <body>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="excel_file" accept=".xls,.xlsx" required>
-        <button type="submit" style="background-color: #2566a1; color: #ffffff; border: 05ex;">Upload</button>
-    </form>
+    <div id="main">
+        <form method="post" enctype="multipart/form-data" id="upload_id">
+            <input type="file" name="excel_file" accept=".xls,.xlsx" required>
+            <button type="submit" style="background-color: #2566a1; color: #ffffff; border: 05ex;">Upload</button>
+        </form>
+    </div>
+   
 </body>
 </html>

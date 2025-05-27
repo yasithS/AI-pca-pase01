@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rename Columns</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .rename-item {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .original-name {
+            font-weight: bold;
+            min-width: 200px;
+            color: #2566a1;
+        }
+        .arrow {
+            margin: 0 15px;
+            font-size: 18px;
+            color: #666;
+        }
+        .rename-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .submit-btn {
+            background-color: #2566a1;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        .submit-btn:hover {
+            background-color: #1e5085;
+        }
+        .back-btn {
+            background-color: #6c757d;
+            color: #ffffff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background-color: #545b62;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .instructions {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2566a1;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Rename Selected Columns</h2>
+    </div>
+    
+    <div class="instructions">
+        <strong>Instructions:</strong> You can rename the selected columns below. Leave the field empty or unchanged to keep the original name.
+    </div>
+    
+    <form action="{{ url_for('rename_columns') }}" method="post">
+        {% for column in columns %}
+            <div class="rename-item">
+                <div class="original-name">{{ column }}</div>
+                <div class="arrow"> >>> </div>
+                <input type="text" 
+                       name="rename_{{ column }}" 
+                       value="{{ column }}" 
+                       placeholder="Enter new name (optional)"
+                       class="rename-input">
+            </div>
+        {% endfor %}
+
+        <div style="margin-top: 30px;">
+            <a href="{{ url_for('upload_file') }}" class="back-btn">← Back to Upload</a>
+            <button type="submit" class="submit-btn">Process & Continue</button>
+        </div>
+    </form>
+    
+    <script>
+        // Auto-select text when clicking on input fields
+        document.querySelectorAll('.rename-input').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.select();
+            });
+        });
+        
+        // Add validation to prevent empty submissions
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const inputs = document.querySelectorAll('.rename-input');
+            let hasValidInput = false;
+            
+            inputs.forEach(input => {
+                if (input.value.trim() !== '') {
+                    hasValidInput = true;
+                }
+            });
+            
+            if (!hasValidInput) {
+                alert('Please provide at least one column name.');
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>

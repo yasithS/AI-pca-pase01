@@ -3,16 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Select Columns</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .column-item {
+            margin: 10px 0;
+            padding: 5px;
+        }
+        .submit-btn {
+            background-color: #2566a1;
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .submit-btn:hover {
+            background-color: #1e5085;
+        }
+    </style>
 </head>
 <body>
-    {% for column in columns %}
-        <input type="checkbox" name="columns" value="{{ column }}" id="{{ column }}">
-        <label for="{{ column }}">{{ column }}</label><br>
-    {% endfor %}
+    <h2>Select Columns from {{ file_name }}</h2>
+    
+    <form action="{{ url_for('select_columns') }}" method="post">
+        {% for column in columns %}
+            <div class="column-item">
+                <input type="checkbox" name="columns" value="{{ column }}" id="{{ column }}">
+                <label for="{{ column }}">{{ column }}</label>
+            </div>
+        {% endfor %}
 
-    <br>
-    <br>
-    <button type="submit" style="background-color: #2566a1; color: #ffffff; border: 05ex;">Submit</button>
+        <br>
+        <button type="submit" class="submit-btn">Next: Rename Columns</button>
+    </form>
+    
+    <script>
+        // Optional: Add select all functionality
+        function addSelectAllButton() {
+            const form = document.querySelector('form');
+            const selectAllBtn = document.createElement('button');
+            selectAllBtn.type = 'button';
+            selectAllBtn.textContent = 'Select All';
+            selectAllBtn.style.marginRight = '10px';
+            selectAllBtn.onclick = function() {
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+                this.textContent = allChecked ? 'Select All' : 'Deselect All';
+            };
+            
+            const submitBtn = document.querySelector('.submit-btn');
+            submitBtn.parentNode.insertBefore(selectAllBtn, submitBtn);
+        }
+        
+        addSelectAllButton();
+    </script>
 </body>
 </html>

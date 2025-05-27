@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Results</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2566a1;
+        }
+        .info-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2566a1;
+        }
+        .info-item {
+            margin: 10px 0;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #2566a1;
+        }
+        .column-mapping {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 10px;
+            align-items: center;
+            padding: 8px;
+            background-color: white;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .original-col {
+            text-align: right;
+            color: #6c757d;
+        }
+        .renamed-col {
+            color: #2566a1;
+            font-weight: bold;
+        }
+        .arrow {
+            text-align: center;
+            color: #28a745;
+        }
+        .table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        .table th, .table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .table th {
+            background-color: #2566a1;
+            color: white;
+        }
+        .table-striped tbody tr:nth-child(odd) {
+            background-color: #f2f2f2;
+        }
+        .btn {
+            background-color: #2566a1;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            display: inline-block;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background-color: #1e5085;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Data Processing Complete</h1>
+        <p>Your columns have been processed successfully!</p>
+    </div>
+    
+    <div class="info-section">
+        <h3>Processing Summary</h3>
+        
+        <div class="info-item">
+            <span class="info-label">Data Shape:</span> 
+            {{ processed_info.data_shape[0] }} rows × {{ processed_info.data_shape[1] }} columns
+        </div>
+        
+        {% if processed_info.column_mapping %}
+        <div class="info-item">
+            <span class="info-label">Column Renaming:</span>
+            {% for old_name, new_name in processed_info.column_mapping.items() %}
+                <div class="column-mapping">
+                    <div class="original-col">{{ old_name }}</div>
+                    <div class="arrow">→</div>
+                    <div class="renamed-col">{{ new_name }}</div>
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div class="info-item">
+            <span class="info-label">Final Columns:</span>
+            {{ processed_info.renamed_columns | join(', ') }}
+        </div>
+    </div>
+    
+    <div class="info-section">
+        <h3>Data Preview (First 5 rows)</h3>
+        {{ data_preview | safe }}
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px;">
+        <a href="{{ url_for('upload_file') }}" class="btn btn-secondary">Upload New File</a>
+        <a href="#" class="btn" onclick="alert('PCA analysis feature coming soon!')">Continue to PCA Analysis</a>
+    </div>
+    
+    <script>
+        console.log('Processing complete!');     
+    </script>
+</body>
+</html>
