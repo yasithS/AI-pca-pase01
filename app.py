@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Add secret key for session
+app.secret_key = 'stringsANDbytes234234'  
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -14,7 +14,6 @@ def upload_file():
     if request.method == 'POST':
         file = request.files.get('excel_file')
         if not file or file.filename == '':
-            print("NO FILE UPLOADED")
             return redirect(request.url)
         
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
