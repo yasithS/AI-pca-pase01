@@ -1,6 +1,11 @@
 from flask import Flask, request, render_template, redirect, url_for, flash, session
 import pandas as pd
 import os
+import matplotlib
+matplotlib.use('Agg') 
+import matplotlib.pyplot as plt
+import io
+import base64
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -79,23 +84,72 @@ def rename_columns():
             'data_shape': df_filtered.shape,
             'column_mapping': column_mapping
         }
+
+        temp_csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'processed.csv')
+        df_filtered.to_csv(temp_csv_path, index=False)
+        session['processed_csv_path'] = temp_csv_path
         
         return render_template('results.html', 
                              processed_info=processed_info,
                              data_preview=df_filtered.head().to_html(classes='table table-striped'))
-        
+    
     except Exception as e:
         flash(f'Error processing file: {str(e)}')
         return redirect(url_for('upload_file'))
     
-@app.route('/graphs', methods=['GET'])
+    
+@app.route('/create_graphs', methods=['GET'])
 def graphs():
-    # Placeholder for graph generation logic
-    return render_template('graphs.html')
+    csv_path = session.get('processed_csv_path')
+    if not csv_path or not os.path.exists(csv_path):
+        flash('Processed data not found. Please restart.')
+        return redirect(url_for('upload_file'))
+
+    df_filtered = pd.read_csv(csv_path)
+    selected_columns = df_filtered.columns.tolist()
+
+    charts = []
+
+    for single in selected_columns:
+        data = df_filtered[single].value_counts()
+        x = data.index.tolist()
+        y = data.values.tolist()
+
+        fig, ax = plt.subplots()
+
+        if single.lower() == 'country':
+            ax.pie(y, labels=x, autopct='%1.1f%%')
+            ax.set_title(f'Distribution of {single}')
+        else:
+            ax.bar(x, y)
+            ax.set_xlabel(single)
+            ax.set_ylabel('Count')
+            ax.set_title(f'Count of values in {single}')
+            plt.xticks(rotation=90)
+
+        plt.tight_layout()
+
+        # Convert to base64
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        base64_img = base64.b64encode(img.getvalue()).decode()
+
+        charts.append({
+            'column': single,
+            'image': base64_img
+        })
+
+        plt.close(fig)
+
+    return render_template('graphs.html', charts=charts)
+
+
 
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('404.html'), 404
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -2,10 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Charts</title>
 </head>
 <body>
-    This is the graphs page. Here you can visualize your data in various formats.
+    <h1>Generated Graphs</h1>
+
+    {% for chart in charts %}
+        <h3>{{ chart.column }}</h3>
+        <img src="data:image/png;base64,{{ chart.image }}" alt="Chart for {{ chart.column }}">
+    {% endfor %}
+    
 </body>
+</html>
+
 </html>
