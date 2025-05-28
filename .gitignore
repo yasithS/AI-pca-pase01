@@ -159,6 +159,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# uploads folder 
+# this is the deafault uploads folder for uploaded excel files 
 uploads/
 
 # apple os
