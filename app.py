@@ -87,6 +87,15 @@ def rename_columns():
     except Exception as e:
         flash(f'Error processing file: {str(e)}')
         return redirect(url_for('upload_file'))
+    
+@app.route('/graphs', methods=['GET'])
+def graphs():
+    # Placeholder for graph generation logic
+    return render_template('graphs.html')
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
