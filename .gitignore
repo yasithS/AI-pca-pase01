@@ -161,6 +161,7 @@ cython_debug/
 
 uploads/
 
+# apple os
 .DS_STORE
 
 # VS Code
