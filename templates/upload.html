@@ -3,27 +3,347 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>AI PCA Tool - Upload File</title>
     <style>
-        #upload_id{
-            border: 2px solid gray;
-            height: 30px;
-            width: 300px;
-        }
         body {
             font-family: Arial, sans-serif;
-            margin: 0px auto;
-       
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .upload-container {
+            background-color: #fff;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #2566a1;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .header p {
+            color: #6c757d;
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            border: 2px dashed #2566a1;
+            border-radius: 8px;
+            padding: 40px 20px;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .file-input-wrapper:hover {
+            border-color: #1e5085;
+            background-color: #e7f3ff;
+        }
+
+        .file-input-wrapper.dragover {
+            border-color: #1e5085;
+            background-color: #e7f3ff;
+            transform: scale(1.02);
+        }
+
+        .file-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-input-content {
+            pointer-events: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #2566a1;
+            margin-bottom: 15px;
+        }
+
+        .file-input-text {
+            color: #2566a1;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .file-input-subtext {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .file-info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #2566a1;
+            display: none;
+            text-align: left;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #2566a1;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .submit-btn {
+            background-color: #2566a1;
+            color: #ffffff;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+            width: 100%;
+        }
+
+        .submit-btn:hover {
+            background-color: #1e5085;
+        }
+
+        .submit-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .accepted-formats {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+
+        .accepted-formats h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .format-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .format-item {
+            background-color: #2566a1;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background-color: #dee2e6;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: #2566a1;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        @media (max-width: 600px) {
+            .upload-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .file-input-wrapper {
+                padding: 30px 15px;
+            }
+
+            .upload-icon {
+                font-size: 36px;
+            }
         }
     </style>
 </head>
 <body>
-    <div id="main">
-        <form method="post" enctype="multipart/form-data" id="upload_id">
-            <input type="file" name="excel_file" accept=".xls,.xlsx" required>
-            <button type="submit" style="background-color: #2566a1; color: #ffffff; border: 05ex;">Upload</button>
+    <div class="upload-container">
+        <div class="header">
+            <h1>AI PCA Tool</h1>
+            <p>Upload your Excel file to get started with Principal Component Analysis</p>
+        </div>
+        
+        <form method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+            <div class="file-input-wrapper" id="fileInputWrapper">
+                <input type="file" name="excel_file" accept=".xls,.xlsx" required class="file-input" id="fileInput">
+                <div class="file-input-content">
+                    <div class="upload-icon">📊</div>
+                    <div class="file-input-text">Click to choose file or drag and drop</div>
+                    <div class="file-input-subtext">Excel files only (.xls, .xlsx)</div>
+                </div>
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <div class="file-name" id="fileName"></div>
+                <div class="file-size" id="fileSize"></div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                Upload and Continue
+            </button>
+
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
         </form>
+
+        <div class="accepted-formats">
+            <h4>Accepted File Formats:</h4>
+            <ul class="format-list">
+                <li class="format-item">.XLS</li>
+                <li class="format-item">.XLSX</li>
+            </ul>
+        </div>
     </div>
-   
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileInputWrapper = document.getElementById('fileInputWrapper');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const submitBtn = document.getElementById('submitBtn');
+        const uploadForm = document.getElementById('uploadForm');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        // File input change handler
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                displayFileInfo(file);
+                submitBtn.disabled = false;
+            } else {
+                hideFileInfo();
+                submitBtn.disabled = true;
+            }
+        });
+
+        // Drag and drop handlers
+        fileInputWrapper.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            fileInputWrapper.classList.add('dragover');
+        });
+
+        fileInputWrapper.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            fileInputWrapper.classList.remove('dragover');
+        });
+
+        fileInputWrapper.addEventListener('drop', function(e) {
+            e.preventDefault();
+            fileInputWrapper.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                displayFileInfo(files[0]);
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Form submission handler
+        uploadForm.addEventListener('submit', function(e) {
+            submitBtn.textContent = 'Uploading...';
+            submitBtn.disabled = true;
+            progressBar.style.display = 'block';
+            
+            // Simulate progress (in real app, you'd track actual upload progress)
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressFill.style.width = progress + '%';
+                if (progress >= 90) {
+                    clearInterval(interval);
+                }
+            }, 100);
+        });
+
+        function displayFileInfo(file) {
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileInfo.classList.add('show');
+        }
+
+        function hideFileInfo() {
+            fileInfo.classList.remove('show');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Prevent default drag behaviors on the document
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+        });
+    </script>
 </body>
 </html>
