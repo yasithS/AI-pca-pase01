@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template, redirect, url_for, flash, session
 import pandas as pd
+import numpy as np
 import os
 import matplotlib
 matplotlib.use('Agg') 
@@ -115,16 +116,16 @@ def graphs():
         x = data.index.tolist()
         y = data.values.tolist()
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(12, 6))
 
         if single.lower() == 'country':
             ax.pie(y, labels=x, autopct='%1.1f%%')
-            ax.set_title(f'Distribution of {single}')
+            ax.set_title(f'Performance by {single}')
         else:
-            ax.bar(x, y)
+            ax.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x)))) 
             ax.set_xlabel(single)
             ax.set_ylabel('Count')
-            ax.set_title(f'Count of values in {single}')
+            ax.set_title(f'Performance by {single}')
             plt.xticks(rotation=90)
 
         plt.tight_layout()
