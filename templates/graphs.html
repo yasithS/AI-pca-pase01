@@ -77,6 +77,10 @@
     </div>
     {% endif %}
 
+    <div id="button-container">
+        <a href="{{ url_for('generate_pptx') }}" class="btn">Generate the report</a>
+    </div>
+
     <script>
         // Chart download functionality
         function downloadChart(columnName, base64Image) {

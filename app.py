@@ -7,6 +7,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import io
 import base64
+from pptx import Presentation
+from pptx.util import Inches
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -111,8 +113,11 @@ def graphs():
 
     charts = []
 
+    ppt = Presentation()
+
     for single in selected_columns:
         data = df_filtered[single].value_counts()
+
         x = data.index.tolist()
         y = data.values.tolist()
 
@@ -138,12 +143,27 @@ def graphs():
 
         charts.append({
             'column': single,
-            'image': base64_img
+            'image': base64_img,
         })
 
         plt.close(fig)
 
+        slide = ppt.slides.add_slide(ppt.slide_layouts[6])
+        left = Inches(1)
+        top = Inches(1)
+        height = Inches(4.5)
+        slide.shapes.add_picture(img, left, top, height=height)
+
+    ppt.save("analysis/test.pptx")
     return render_template('graphs.html', charts=charts)
+
+@app.route('/generate_pptx', methods = ['GET'])
+def generate_pptx():
+    pass
+    
+
+    return render_template('pptx.html')
+    
 
 
 @app.errorhandler(404)
