@@ -168,3 +168,6 @@ uploads/
 
 # VS Code
 .vscode/
+
+# analysis folder
+analysis/
