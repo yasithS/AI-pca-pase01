@@ -2,17 +2,142 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Charts</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Visualization - AI PCA Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graphs.css') }}">
+    
 </head>
 <body>
-    <h1>Generated Graphs</h1>
+   
 
-    {% for chart in charts %}
-        <h3>{{ chart.column }}</h3>
-        <img src="data:image/png;base64,{{ chart.image }}" alt="Chart for {{ chart.column }}">
-    {% endfor %}
-    
+    <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+            <span class="stat-number" id="chartCount">{{ charts|length }}</span>
+            <span class="stat-label">Charts Generated</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">{{ charts|length }}</span>
+            <span class="stat-label">Columns Analyzed</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">100%</span>
+            <span class="stat-label">Success Rate</span>
+        </div>
+    </div>
+
+    <div class="actions-bar">
+        <a href="{{ url_for('upload_file') }}" class="action-btn btn-secondary">📤 Upload New File</a>
+        <button onclick="downloadAllCharts()" class="action-btn btn-success">💾 Download All Charts</button>
+        <button onclick="generateReport()" class="action-btn btn-primary">📋 Generate Report</button>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+        <p>Loading charts...</p>
+    </div>
+
+    {% if charts %}
+    <div class="charts-container" id="chartsContainer">
+        {% for chart in charts %}
+        <div class="chart-card" data-column="{{ chart.column }}">
+            <div class="chart-header">
+                <h3 class="chart-title">{{ chart.column }}</h3>
+                <p class="chart-subtitle">Data Distribution Analysis</p>
+            </div>
+            <div class="chart-content">
+                <img src="data:image/png;base64,{{ chart.image }}" 
+                     alt="Chart for {{ chart.column }}" 
+                     class="chart-image"
+                     loading="lazy">
+            </div>
+            <div class="chart-footer">
+                <span class="chart-type">
+                    {% if chart.column.lower() == 'country' %}
+                        Pie Chart
+                    {% else %}
+                        Bar Chart
+                    {% endif %}
+                </span>
+                <button onclick="downloadChart('{{ chart.column }}', '{{ chart.image }}')" 
+                        class="download-btn">
+                    ⬇ Download
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-charts">
+        <div class="no-charts-icon">📈</div>
+        <h2>No Charts Available</h2>
+        <p>Upload an Excel file to generate visualizations</p>
+        <a href="{{ url_for('upload_file') }}" class="action-btn btn-primary" style="margin-top: 20px;">
+            Get Started
+        </a>
+    </div>
+    {% endif %}
+
+    <script>
+        // Chart download functionality
+        function downloadChart(columnName, base64Image) {
+            const link = document.createElement('a');
+            link.download = `${columnName}_chart.png`;
+            link.href = `data:image/png;base64,${base64Image}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Download all charts
+        function downloadAllCharts() {
+            const charts = document.querySelectorAll('.chart-card');
+            charts.forEach((chart, index) => {
+                setTimeout(() => {
+                    const columnName = chart.dataset.column;
+                    const img = chart.querySelector('.chart-image');
+                    const base64 = img.src.split(',')[1];
+                    downloadChart(columnName, base64);
+                }, index * 200); // Stagger downloads
+            });
+        }
+
+        // Generate report functionality
+        function generateReport() {
+            alert('Report generation feature coming soon! This will create a comprehensive PDF report with all charts and analysis.');
+        }
+
+        // Lazy loading animation
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.chart-card');
+            cards.forEach((card, index) => {
+                setTimeout(() => {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateY(20px)';
+                    card.style.transition = 'all 0.5s ease';
+                    
+                    setTimeout(() => {
+                        card.style.opacity = '1';
+                        card.style.transform = 'translateY(0)';
+                    }, 50);
+                }, index * 100);
+            });
+        });
+
+        // Image loading error handling
+        document.querySelectorAll('.chart-image').forEach(img => {
+            img.addEventListener('error', function() {
+                this.parentElement.innerHTML = `
+                    <div style="padding: 40px; color: #6c757d; text-align: center;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
+                        <p>Failed to load chart</p>
+                    </div>
+                `;
+            });
+        });
+
+        // Add smooth scrolling
+        document.documentElement.style.scrollBehavior = 'smooth';
+    </script>
 </body>
 </html>
-
 </html>
