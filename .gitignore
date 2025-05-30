@@ -169,4 +169,9 @@ uploads/
 # VS Code
 .vscode/
 
-analysis/results/ 
+# Ignore everything in results and charts except the directory itself and .gitkeep
+analysis/results/*
+!analysis/results/.gitkeep
+
+analysis/charts/*
+!analysis/charts/.gitkeep
