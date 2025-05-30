@@ -79,8 +79,7 @@ def rename_columns():
         if column_mapping:
             df_filtered.rename(columns=column_mapping, inplace=True)
         
-        # Here you can add your PCA processing logic
-        # For now, just display the processed data info
+        # just display the processed data info
         processed_info = {
             'original_columns': selected_columns,
             'renamed_columns': list(df_filtered.columns),
@@ -115,6 +114,12 @@ def graphs():
     chart_dir = os.path.join('analysis', 'charts')
     os.makedirs(chart_dir, exist_ok=True)
 
+    # Remove old chart images before saving new ones
+    for filename in os.listdir(chart_dir):
+        file_path = os.path.join(chart_dir, filename)
+        if os.path.isfile(file_path) and filename.endswith('.png'):
+            os.remove(file_path)
+
     for single in selected_columns:
         data = df_filtered[single].value_counts()
 
@@ -148,9 +153,6 @@ def graphs():
             'column': single,
             'image': base64_img,
         })
-
-        # storing the charts in session
-        # session['charts'] = charts
 
         plt.close(fig)
 
