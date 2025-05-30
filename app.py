@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session
+from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file
 import pandas as pd
 import numpy as np
 import os
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import io
 import base64
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -112,8 +112,8 @@ def graphs():
     selected_columns = df_filtered.columns.tolist()
 
     charts = []
-
-    ppt = Presentation()
+    chart_dir = os.path.join('analysis', 'charts')
+    os.makedirs(chart_dir, exist_ok=True)
 
     for single in selected_columns:
         data = df_filtered[single].value_counts()
@@ -141,30 +141,56 @@ def graphs():
         img.seek(0)
         base64_img = base64.b64encode(img.getvalue()).decode()
 
+        img_path = os.path.join(chart_dir, f"{single}.png")
+        plt.savefig(img_path, format='png')
+
         charts.append({
             'column': single,
             'image': base64_img,
         })
 
+        # storing the charts in session
+        # session['charts'] = charts
+
         plt.close(fig)
 
-        slide = ppt.slides.add_slide(ppt.slide_layouts[6])
-        left = Inches(1)
-        top = Inches(1)
-        height = Inches(4.5)
-        slide.shapes.add_picture(img, left, top, height=height)
-
-    ppt.save("analysis/test.pptx")
     return render_template('graphs.html', charts=charts)
 
 @app.route('/generate_pptx', methods = ['GET'])
 def generate_pptx():
-    pass
-    
+    chart_dir = os.path.join('analysis', 'charts')
+    if not os.path.exists(chart_dir):
+        flash('Charts not found. Please generate graphs first.')
+        return redirect(url_for('graphs'))
 
-    return render_template('pptx.html')
-    
+    charts = []
+    for filename in os.listdir(chart_dir):
+        if filename.endswith('.png'):
+            column = os.path.splitext(filename)[0]
+            img_path = os.path.join(chart_dir, filename)
+            charts.append({'column': column, 'image_path': img_path})
 
+    ppt = Presentation()
+    for chart in charts:
+        column = chart['column']
+        img_path = chart['image_path']
+        slide = ppt.slides.add_slide(ppt.slide_layouts[6])
+        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(8), Inches(1))
+        title_frame = title_box.text_frame
+        title_frame.text = f"Performance by {column}"
+        title_frame.paragraphs[0].runs[0].font.size = Pt(32)
+        title_frame.paragraphs[0].runs[0].bold = True
+        left = Inches(1)
+        top = Inches(1.5)
+        height = Inches(4.5)
+        slide.shapes.add_picture(img_path, left, top, height=height)
+
+    pptx_path = os.path.abspath(os.path.join('analysis/results', 'test.pptx'))
+    os.makedirs(os.path.dirname(pptx_path), exist_ok=True)
+    ppt.save(pptx_path)
+
+    return send_file(pptx_path, as_attachment=True)
+    
 
 @app.errorhandler(404)
 def page_not_found(e):
