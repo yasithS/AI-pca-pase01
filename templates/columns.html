@@ -4,30 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Columns</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .column-item {
-            margin: 10px 0;
-            padding: 5px;
-        }
-        .submit-btn {
-            background-color: #2566a1;
-            color: #ffffff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        .submit-btn:hover {
-            background-color: #1e5085;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/columns.css') }}">
 </head>
 <body>
     <h2>Select Columns from {{ file_name }}</h2>
