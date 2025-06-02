@@ -25,21 +25,10 @@
         </div>
     </div>
 
-    <div class="chart-type-toggle" style="margin: 20px 0; text-align: center;">
-    <form method="get" action="{{ url_for('graphs') }}" style="display: inline-block;">
-        <button type="submit" name="type" value="bar" class="action-btn btn-primary" {% if chart_type == 'bar' %}disabled{% endif %}>
-            Bar Graphs
-        </button>
-        <button type="submit" name="type" value="pie" class="action-btn btn-primary" {% if chart_type == 'pie' %}disabled{% endif %}>
-            Pie Charts
-        </button>
-    </form>
-    </div>
-
     <div class="actions-bar">
         <a href="{{ url_for('upload_file') }}" class="action-btn btn-secondary">📤 Upload New File</a>
         <button onclick="downloadAllCharts()" class="action-btn btn-success">💾 Download All Charts</button>
-        <button onclick="generateReport()" class="action-btn btn-primary">📋 Generate Report</button>
+         <a href="{{ url_for('generate_pptx') }}" class="action-btn btn-primary">Generate the report</a>
     </div>
 
     <div class="loading-spinner" id="loadingSpinner">
@@ -56,19 +45,24 @@
                 <p class="chart-subtitle">Data Distribution Analysis</p>
             </div>
             <div class="chart-content">
-                <img src="data:image/png;base64,{{ chart.image }}" 
-                     alt="Chart for {{ chart.column }}" 
-                     class="chart-image"
-                     loading="lazy">
+                <img src="data:image/png;base64,{{ chart.bar }}" 
+                    alt="Bar Chart for {{ chart.column }}" 
+                    class="chart-image"
+                    id="img-{{ loop.index0 }}"
+                    data-bar="data:image/png;base64,{{ chart.bar }}"
+                    data-pie="data:image/png;base64,{{ chart.pie }}"
+                    data-type="bar"
+                    loading="lazy">
             </div>
             <div class="chart-footer">
-                <span class="chart-type">
-                    {{ chart_type|capitalize }} Chart
-                </span>
-                <button onclick="downloadChart('{{ chart.column }}', '{{ chart.image }}')" 
-                        class="download-btn">
-                    ⬇ Download
+                <span class="chart-type" id="label-{{ loop.index0 }}">Bar Chart</span>
+                <button type="button" class="toggle-btn chart-type-toggle" onclick="toggleChart({{ loop.index0 }})">
+                 🔄 Toggle
                 </button>
+                <button onclick="downloadChart('{{ chart.column }}', document.getElementById('img-{{ loop.index0 }}').src.split(',')[1])" 
+                class="download-btn">
+                ⬇ Download
+             </button>
             </div>
         </div>
         {% endfor %}
@@ -112,9 +106,18 @@
             });
         }
 
-        // Generate report functionality
-        function generateReport() {
-            alert('Report generation feature coming soon! This will create a comprehensive PDF report with all charts and analysis.');
+        function toggleChart(idx) {
+        const img = document.getElementById('img-' + idx);
+        const label = document.getElementById('label-' + idx);
+        if (img.dataset.type === 'bar') {
+            img.src = img.dataset.pie;
+            img.dataset.type = 'pie';
+            label.textContent = 'Pie Chart';
+        } else {
+            img.src = img.dataset.bar;
+            img.dataset.type = 'bar';
+            label.textContent = 'Bar Chart';
+        }
         }
 
         // Lazy loading animation

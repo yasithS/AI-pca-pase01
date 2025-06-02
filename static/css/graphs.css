@@ -44,6 +44,7 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 30px;
+            margin-top: 30px;
         }
 
         .stat-item {
@@ -142,6 +143,23 @@
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        .chart-type-toggle {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
+            position: relative;
+            overflow: hidden;
         }
 
         .download-btn {
