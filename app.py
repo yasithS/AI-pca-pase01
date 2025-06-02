@@ -102,6 +102,7 @@ def rename_columns():
     
 @app.route('/create_graphs', methods=['GET'])
 def graphs():
+    chart_type = request.args.get('type', 'bar')
     csv_path = session.get('processed_csv_path')
     if not csv_path or not os.path.exists(csv_path):
         flash('Processed data not found. Please restart.')
@@ -131,6 +132,9 @@ def graphs():
         if single.lower() == 'country':
             ax.pie(y, labels=x, autopct='%1.1f%%')
             ax.set_title(f'Performance by {single}')
+        elif chart_type == 'pie':
+            ax.pie(y, labels=x, autopct='%1.1f%%')
+            ax.set_title(f"performance by {single}")
         else:
             ax.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x)))) 
             ax.set_xlabel(single)
