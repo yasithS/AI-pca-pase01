@@ -34,6 +34,7 @@ def upload_file():
             return redirect(request.url)
         
         columns = list(df.columns)
+        
         # Store file info in session
         session['file_name'] = file.filename
         session['file_path'] = file_path
@@ -122,39 +123,49 @@ def graphs():
 
     for single in selected_columns:
         data = df_filtered[single].value_counts()
-
         x = data.index.tolist()
         y = data.values.tolist()
 
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        if single.lower() == 'country':
-            ax.pie(y, labels=x, autopct='%1.1f%%')
-            ax.set_title(f'Performance by {single}')
-        else:
-            ax.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x)))) 
-            ax.set_xlabel(single)
-            ax.set_ylabel('Count')
-            ax.set_title(f'Performance by {single}')
-            plt.xticks(rotation=90)
-
+        # Bar chart
+        fig_bar, ax_bar = plt.subplots(figsize=(8, 8))
+        ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
+        ax_bar.set_xlabel(single)
+        ax_bar.set_ylabel('Count')
+        ax_bar.set_title(f"Performance by {single}")
+        plt.xticks(rotation=90)
         plt.tight_layout()
+        img_bar = io.BytesIO()
+        plt.savefig(img_bar, format='png')
+        img_bar.seek(0)
+        base64_bar = base64.b64encode(img_bar.getvalue()).decode()
+        plt.close(fig_bar)
 
-        # Convert to base64
-        img = io.BytesIO()
-        plt.savefig(img, format='png')
-        img.seek(0)
-        base64_img = base64.b64encode(img.getvalue()).decode()
+        # Save bar chart as file
+        bar_path = os.path.join(chart_dir, f"{single}_bar.png")
+        with open(bar_path, "wb") as f:
+            f.write(img_bar.getvalue())
 
-        img_path = os.path.join(chart_dir, f"{single}.png")
-        plt.savefig(img_path, format='png')
+        # Pie chart
+        fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
+        ax_pie.pie(y, labels=x, autopct='%1.1f%%')
+        ax_pie.set_title(f'Performance by {single}')
+        plt.tight_layout()
+        img_pie = io.BytesIO()
+        plt.savefig(img_pie, format='png')
+        img_pie.seek(0)
+        base64_pie = base64.b64encode(img_pie.getvalue()).decode()
+        plt.close(fig_pie)
+
+        # Save pie chart as file
+        pie_path = os.path.join(chart_dir, f"{single}_pie.png")
+        with open(pie_path, "wb") as f:
+            f.write(img_pie.getvalue())
 
         charts.append({
             'column': single,
-            'image': base64_img,
+            'bar': base64_bar,
+            'pie': base64_pie
         })
-
-        plt.close(fig)
 
     return render_template('graphs.html', charts=charts)
 
