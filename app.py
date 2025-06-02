@@ -9,6 +9,11 @@ import io
 import base64
 from pptx import Presentation
 from pptx.util import Inches, Pt
+import pickle
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -16,6 +21,48 @@ app.secret_key = 'stringsANDbytes234234'
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive.file']
+
+@app.route('/authorize')
+def authorize():
+    flow = Flow.from_client_secrets_file(
+        'credentials.json',
+        scopes=SCOPES,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    session['state'] = state
+    return redirect(authorization_url)
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    state = session['state']
+    flow = Flow.from_client_secrets_file(
+        'credentials.json',
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    flow.fetch_token(authorization_response=request.url)
+
+    credentials = flow.credentials
+    session['credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+    flash('Google authorization successful!')
+    return redirect(url_for('upload_file'))
+
+
+
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
