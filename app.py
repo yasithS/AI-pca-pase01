@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file
+from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file, jsonify
 import pandas as pd
 import numpy as np
 import os
@@ -9,6 +9,13 @@ import io
 import base64
 from pptx import Presentation
 from pptx.util import Inches, Pt
+import pickle
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.http import MediaFileUpload
+
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -16,6 +23,52 @@ app.secret_key = 'stringsANDbytes234234'
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+SCOPES = ['https://www.googleapis.com/auth/presentations', 
+          'https://www.googleapis.com/auth/drive.file',
+          'openid',
+          'https://www.googleapis.com/auth/userinfo.email']
+
+PRESENTATION_ID = "1JOO0NCYTGQIz-aQCi_a0Q9NJAeZ3JvakwUyxB6bcrAc"
+
+@app.route('/authorize')
+def authorize():
+    flow = Flow.from_client_secrets_file(
+        'credentials.json',
+        scopes=SCOPES,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    session['state'] = state
+    return redirect(authorization_url)
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    state = session['state']
+    flow = Flow.from_client_secrets_file(
+        'credentials.json',
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    flow.fetch_token(authorization_response=request.url)
+
+    credentials = flow.credentials
+
+    session['credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+    print('Google authorization successful!')
+
+    return redirect(url_for('upload_file'))
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
@@ -127,11 +180,11 @@ def graphs():
         y = data.values.tolist()
 
         # Bar chart
-        fig_bar, ax_bar = plt.subplots(figsize=(8, 8))
+        fig_bar, ax_bar = plt.subplots(figsize=(5, 5))
         ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
         ax_bar.set_xlabel(single)
         ax_bar.set_ylabel('Count')
-        ax_bar.set_title(f"Performance by {single}")
+        # ax_bar.set_title(f"Performance by {single}")
         plt.xticks(rotation=90)
         plt.tight_layout()
         img_bar = io.BytesIO()
@@ -146,9 +199,9 @@ def graphs():
             f.write(img_bar.getvalue())
 
         # Pie chart
-        fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
+        fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
         ax_pie.pie(y, labels=x, autopct='%1.1f%%')
-        ax_pie.set_title(f'Performance by {single}')
+        # ax_pie.set_title(f'Performance by {single}')
         plt.tight_layout()
         img_pie = io.BytesIO()
         plt.savefig(img_pie, format='png')
@@ -169,42 +222,158 @@ def graphs():
 
     return render_template('graphs.html', charts=charts)
 
-@app.route('/generate_pptx', methods = ['GET'])
-def generate_pptx():
-    chart_dir = os.path.join('analysis', 'charts')
-    if not os.path.exists(chart_dir):
-        flash('Charts not found. Please generate graphs first.')
-        return redirect(url_for('graphs'))
+@app.route('/update_selected_graph_type', methods=['POST'])
+def update_selected_graph_type():
+    data = request.get_json()
+    column = data.get('column')
+    graph_type = data.get('graphType')
 
-    charts = []
-    for filename in os.listdir(chart_dir):
-        if filename.endswith('.png'):
-            column = os.path.splitext(filename)[0]
-            img_path = os.path.join(chart_dir, filename)
-            charts.append({'column': column, 'image_path': img_path})
+    if not column or not graph_type:
+        return jsonify({'error': 'Invalid data'}), 400
 
-    ppt = Presentation()
-    for chart in charts:
-        column = chart['column']
-        img_path = chart['image_path']
-        slide = ppt.slides.add_slide(ppt.slide_layouts[6])
-        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = f"Performance by {column}"
-        title_frame.paragraphs[0].runs[0].font.size = Pt(32)
-        title_frame.paragraphs[0].runs[0].bold = True
-        left = Inches(1)
-        top = Inches(1.5)
-        height = Inches(4.5)
-        slide.shapes.add_picture(img_path, left, top, height=height)
+    # Update session with selected graph type
+    if 'selected_graph_types' not in session:
+        session['selected_graph_types'] = {}
 
-    pptx_path = os.path.abspath(os.path.join('analysis/results', 'test.pptx'))
-    os.makedirs(os.path.dirname(pptx_path), exist_ok=True)
-    ppt.save(pptx_path)
+    session['selected_graph_types'][column] = graph_type
+    session.modified = True  # Mark session as modified to ensure changes are saved
 
-    return send_file(pptx_path, as_attachment=True)
+    return jsonify({'success': True})
+
+@app.route('/slides', methods=['GET'])
+def slides():
+    if 'credentials' not in session:
+        flash('Google authorization required. Please authorize first.')
+        return redirect(url_for('authorize'))
+
+    credentials = Credentials(**session['credentials'])
+    try:
+        drive_service = build('drive', 'v3', credentials=credentials)
+        slides_service = build('slides', 'v1', credentials=credentials)
+
+        chart_dir = os.path.join('analysis', 'charts')
+        if not os.path.exists(chart_dir):
+            flash('Charts not found. Please generate graphs first.')
+            return redirect(url_for('graphs'))
+
+        # Get selected graph types from session
+        selected_graph_types = session.get('selected_graph_types', {})
+        if not selected_graph_types:
+            flash('No graph types selected. Please select graphs first.')
+            return redirect(url_for('graphs'))
+
+        uploaded_files = []
+        for column, graph_type in selected_graph_types.items():
+            filename = f"{column}_{graph_type}.png"
+            file_path = os.path.join(chart_dir, filename)
+            if not os.path.exists(file_path):
+                flash(f"Graph file {filename} not found.")
+                continue
+
+            # 1) Upload the PNG to Drive
+            upload_res = drive_service.files().create(
+                body={'name': filename, 'mimeType': 'image/png'},
+                media_body=MediaFileUpload(file_path, mimetype='image/png'),
+                fields='id'
+            ).execute()
+
+            file_id = upload_res['id']
+
+            # 2) Make it “anyone with link → Reader”
+            drive_service.permissions().create(
+                fileId=file_id,
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+
+            # 3) Build the public “export=view” URL
+            public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+            uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename, 'column': column})
+
+        # 4) Open the existing Google Slides template
+        presentation_id = PRESENTATION_ID  
+        presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
+
+        # 5) Prepare batchUpdate requests to replace placeholders with images and titles
+        requests = []
+        for idx, upload in enumerate(uploaded_files):
+            chart_title = f"Performance by {upload['column']}"
+            placeholder_title = f"{{{{SLIDE{idx+1}_TITLE}}}}"
+            placeholder_chart = f"{{{{CHART{idx+1}}}}}"
+            slide_id = None
+
+            # Find the slide containing the placeholders
+            for slide in presentation['slides']:
+                for element in slide.get('pageElements', []):
+                    if 'shape' in element and 'text' in element['shape']:
+                        text_content = element['shape']['text']['textElements']
+                        for text_element in text_content:
+                            if 'textRun' in text_element:
+                                if placeholder_title in text_element['textRun']['content']:
+                                    slide_id = slide['objectId']
+                                    break
+                                if placeholder_chart in text_element['textRun']['content']:
+                                    slide_id = slide['objectId']
+                                    break
+                    if slide_id:
+                        break
+                if slide_id:
+                    break
+
+            if slide_id:
+                # Replace placeholder title
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': placeholder_title,
+                            'matchCase': True
+                        },
+                        'replaceText': chart_title
+                    }
+                })
+
+                # Replace placeholder chart with an image
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': placeholder_chart,
+                            'matchCase': True
+                        },
+                        'replaceText': ''  # Clear the placeholder text
+                    }
+                })
+                requests.append({
+                    'createImage': {
+                        'url': upload['url'],
+                        'elementProperties': {
+                            'pageObjectId': slide_id,
+                            'size': {
+                                'height': {'magnitude': 4000000, 'unit': 'EMU'},
+                                'width': {'magnitude': 6000000, 'unit': 'EMU'}
+                            },
+                            'transform': {
+                                'scaleX': 1,
+                                'scaleY': 1,
+                                'translateX': 1000000,
+                                'translateY': 1000000,
+                                'unit': 'EMU'
+                            }
+                        }
+                    }
+                })
+
+        # 6) Send the batchUpdate request
+        slides_service.presentations().batchUpdate(
+            presentationId=presentation_id,
+            body={'requests': requests}
+        ).execute()
+
+        flash('Google Slides presentation updated successfully!')
+        return redirect(f"https://docs.google.com/presentation/d/{presentation_id}")
+
+    except Exception as e:
+        flash(f'Error updating Google Slides presentation: {str(e)}')
+        return redirect(url_for('upload_file'))
     
-
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('error_404.html'), 404

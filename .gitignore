@@ -175,3 +175,6 @@ analysis/results/*
 
 analysis/charts/*
 !analysis/charts/.gitkeep
+
+# google sides API credentials
+credentials.json
