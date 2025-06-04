@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file
+from flask import Flask, request, render_template, redirect, url_for, flash, session, send_file, jsonify
 import pandas as pd
 import numpy as np
 import os
@@ -16,6 +16,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
 
+
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
 
@@ -23,9 +24,12 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive.file']
+SCOPES = ['https://www.googleapis.com/auth/presentations', 
+          'https://www.googleapis.com/auth/drive.file',
+          'openid',
+          'https://www.googleapis.com/auth/userinfo.email']
 
-PRESENTATION_ID = "16Uek7NYYMYNbDWTwl1p3jOc2QLhxYsAinmGA0E7OHGU"
+PRESENTATION_ID = "1JOO0NCYTGQIz-aQCi_a0Q9NJAeZ3JvakwUyxB6bcrAc"
 
 @app.route('/authorize')
 def authorize():
@@ -53,6 +57,7 @@ def oauth2callback():
     flow.fetch_token(authorization_response=request.url)
 
     credentials = flow.credentials
+
     session['credentials'] = {
         'token': credentials.token,
         'refresh_token': credentials.refresh_token,
@@ -61,11 +66,9 @@ def oauth2callback():
         'client_secret': credentials.client_secret,
         'scopes': credentials.scopes
     }
-    flash('Google authorization successful!')
+    print('Google authorization successful!')
+
     return redirect(url_for('upload_file'))
-
-
-
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
@@ -177,11 +180,11 @@ def graphs():
         y = data.values.tolist()
 
         # Bar chart
-        fig_bar, ax_bar = plt.subplots(figsize=(6, 6))
+        fig_bar, ax_bar = plt.subplots(figsize=(5, 5))
         ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
         ax_bar.set_xlabel(single)
         ax_bar.set_ylabel('Count')
-        ax_bar.set_title(f"Performance by {single}")
+        # ax_bar.set_title(f"Performance by {single}")
         plt.xticks(rotation=90)
         plt.tight_layout()
         img_bar = io.BytesIO()
@@ -196,9 +199,9 @@ def graphs():
             f.write(img_bar.getvalue())
 
         # Pie chart
-        fig_pie, ax_pie = plt.subplots(figsize=(6, 6))
+        fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
         ax_pie.pie(y, labels=x, autopct='%1.1f%%')
-        ax_pie.set_title(f'Performance by {single}')
+        # ax_pie.set_title(f'Performance by {single}')
         plt.tight_layout()
         img_pie = io.BytesIO()
         plt.savefig(img_pie, format='png')
@@ -219,44 +222,26 @@ def graphs():
 
     return render_template('graphs.html', charts=charts)
 
-@app.route('/generate_pptx', methods = ['GET'])
-def generate_pptx():
-    chart_dir = os.path.join('analysis', 'charts')
-    if not os.path.exists(chart_dir):
-        flash('Charts not found. Please generate graphs first.')
-        return redirect(url_for('graphs'))
+@app.route('/update_selected_graph_type', methods=['POST'])
+def update_selected_graph_type():
+    data = request.get_json()
+    column = data.get('column')
+    graph_type = data.get('graphType')
 
-    charts = []
-    for filename in os.listdir(chart_dir):
-        if filename.endswith('.png'):
-            column = os.path.splitext(filename)[0]
-            img_path = os.path.join(chart_dir, filename)
-            charts.append({'column': column, 'image_path': img_path})
+    if not column or not graph_type:
+        return jsonify({'error': 'Invalid data'}), 400
 
-    ppt = Presentation()
-    for chart in charts:
-        column = chart['column']
-        img_path = chart['image_path']
-        slide = ppt.slides.add_slide(ppt.slide_layouts[6])
-        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = f"Performance by {column}"
-        title_frame.paragraphs[0].runs[0].font.size = Pt(32)
-        title_frame.paragraphs[0].runs[0].bold = True
-        left = Inches(1)
-        top = Inches(1.5)
-        height = Inches(4.5)
-        slide.shapes.add_picture(img_path, left, top, height=height)
+    # Update session with selected graph type
+    if 'selected_graph_types' not in session:
+        session['selected_graph_types'] = {}
 
-    pptx_path = os.path.abspath(os.path.join('analysis/results', 'test.pptx'))
-    os.makedirs(os.path.dirname(pptx_path), exist_ok=True)
-    ppt.save(pptx_path)
+    session['selected_graph_types'][column] = graph_type
+    session.modified = True  # Mark session as modified to ensure changes are saved
 
-    return send_file(pptx_path, as_attachment=True)
+    return jsonify({'success': True})
 
-
-@app.route('/generate_google_slides', methods=['GET'])
-def generate_google_slides():
+@app.route('/slides', methods=['GET'])
+def slides():
     if 'credentials' not in session:
         flash('Google authorization required. Please authorize first.')
         return redirect(url_for('authorize'))
@@ -271,12 +256,20 @@ def generate_google_slides():
             flash('Charts not found. Please generate graphs first.')
             return redirect(url_for('graphs'))
 
+        # Get selected graph types from session
+        selected_graph_types = session.get('selected_graph_types', {})
+        if not selected_graph_types:
+            flash('No graph types selected. Please select graphs first.')
+            return redirect(url_for('graphs'))
+
         uploaded_files = []
-        for filename in os.listdir(chart_dir):
-            if not filename.endswith('.png'):
+        for column, graph_type in selected_graph_types.items():
+            filename = f"{column}_{graph_type}.png"
+            file_path = os.path.join(chart_dir, filename)
+            if not os.path.exists(file_path):
+                flash(f"Graph file {filename} not found.")
                 continue
 
-            file_path = os.path.join(chart_dir, filename)
             # 1) Upload the PNG to Drive
             upload_res = drive_service.files().create(
                 body={'name': filename, 'mimeType': 'image/png'},
@@ -294,7 +287,7 @@ def generate_google_slides():
 
             # 3) Build the public “export=view” URL
             public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
-            uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename})
+            uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename, 'column': column})
 
         # 4) Open the existing Google Slides template
         presentation_id = PRESENTATION_ID  
@@ -303,7 +296,7 @@ def generate_google_slides():
         # 5) Prepare batchUpdate requests to replace placeholders with images and titles
         requests = []
         for idx, upload in enumerate(uploaded_files):
-            chart_title = f"Performance by {os.path.splitext(upload['name'])[0]}"
+            chart_title = f"Performance by {upload['column']}"
             placeholder_title = f"{{{{SLIDE{idx+1}_TITLE}}}}"
             placeholder_chart = f"{{{{CHART{idx+1}}}}}"
             slide_id = None
@@ -380,7 +373,7 @@ def generate_google_slides():
     except Exception as e:
         flash(f'Error updating Google Slides presentation: {str(e)}')
         return redirect(url_for('upload_file'))
-
+    
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('error_404.html'), 404
