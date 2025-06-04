@@ -25,6 +25,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive.file']
 
+PRESENTATION_ID = "16Uek7NYYMYNbDWTwl1p3jOc2QLhxYsAinmGA0E7OHGU"
+
 @app.route('/authorize')
 def authorize():
     flow = Flow.from_client_secrets_file(
@@ -175,7 +177,7 @@ def graphs():
         y = data.values.tolist()
 
         # Bar chart
-        fig_bar, ax_bar = plt.subplots(figsize=(8, 8))
+        fig_bar, ax_bar = plt.subplots(figsize=(6, 6))
         ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
         ax_bar.set_xlabel(single)
         ax_bar.set_ylabel('Count')
@@ -194,7 +196,7 @@ def graphs():
             f.write(img_bar.getvalue())
 
         # Pie chart
-        fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
+        fig_pie, ax_pie = plt.subplots(figsize=(6, 6))
         ax_pie.pie(y, labels=x, autopct='%1.1f%%')
         ax_pie.set_title(f'Performance by {single}')
         plt.tight_layout()
@@ -252,6 +254,7 @@ def generate_pptx():
 
     return send_file(pptx_path, as_attachment=True)
 
+
 @app.route('/generate_google_slides', methods=['GET'])
 def generate_google_slides():
     if 'credentials' not in session:
@@ -291,57 +294,92 @@ def generate_google_slides():
 
             # 3) Build the public “export=view” URL
             public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
-            uploaded_files.append({'id': file_id, 'url': public_url})
+            uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename})
 
-        # 4) Create a new blank Slides deck
-        presentation = slides_service.presentations().create(
-            body={'title': 'Generated Charts'}
-        ).execute()
-        presentation_id = presentation['presentationId']
+        # 4) Open the existing Google Slides template
+        presentation_id = PRESENTATION_ID  
+        presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
 
-        # 5) Build a batchUpdate that creates one slide per image, then places it
+        # 5) Prepare batchUpdate requests to replace placeholders with images and titles
         requests = []
         for idx, upload in enumerate(uploaded_files):
-            slide_id = f"slide_{idx+1}"
-            requests.append({
-                'createSlide': {
-                    'objectId': slide_id,
-                    'slideLayoutReference': {'predefinedLayout': 'BLANK'}
-                }
-            })
-            requests.append({
-                'createImage': {
-                    'url': upload['url'],
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {
-                            'height': {'magnitude': 4000000, 'unit': 'EMU'},
-                            'width':  {'magnitude': 6000000, 'unit': 'EMU'}
+            chart_title = f"Performance by {os.path.splitext(upload['name'])[0]}"
+            placeholder_title = f"{{{{SLIDE{idx+1}_TITLE}}}}"
+            placeholder_chart = f"{{{{CHART{idx+1}}}}}"
+            slide_id = None
+
+            # Find the slide containing the placeholders
+            for slide in presentation['slides']:
+                for element in slide.get('pageElements', []):
+                    if 'shape' in element and 'text' in element['shape']:
+                        text_content = element['shape']['text']['textElements']
+                        for text_element in text_content:
+                            if 'textRun' in text_element:
+                                if placeholder_title in text_element['textRun']['content']:
+                                    slide_id = slide['objectId']
+                                    break
+                                if placeholder_chart in text_element['textRun']['content']:
+                                    slide_id = slide['objectId']
+                                    break
+                    if slide_id:
+                        break
+                if slide_id:
+                    break
+
+            if slide_id:
+                # Replace placeholder title
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': placeholder_title,
+                            'matchCase': True
                         },
-                        'transform': {
-                            'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': 1000000,
-                            'translateY': 1000000,
-                            'unit': 'EMU'
+                        'replaceText': chart_title
+                    }
+                })
+
+                # Replace placeholder chart with an image
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': placeholder_chart,
+                            'matchCase': True
+                        },
+                        'replaceText': ''  # Clear the placeholder text
+                    }
+                })
+                requests.append({
+                    'createImage': {
+                        'url': upload['url'],
+                        'elementProperties': {
+                            'pageObjectId': slide_id,
+                            'size': {
+                                'height': {'magnitude': 4000000, 'unit': 'EMU'},
+                                'width': {'magnitude': 6000000, 'unit': 'EMU'}
+                            },
+                            'transform': {
+                                'scaleX': 1,
+                                'scaleY': 1,
+                                'translateX': 1000000,
+                                'translateY': 1000000,
+                                'unit': 'EMU'
+                            }
                         }
                     }
-                }
-            })
+                })
 
-        # 6) Finally send the batch update
+        # 6) Send the batchUpdate request
         slides_service.presentations().batchUpdate(
             presentationId=presentation_id,
             body={'requests': requests}
         ).execute()
 
-        flash('Google Slides presentation created successfully!')
+        flash('Google Slides presentation updated successfully!')
         return redirect(f"https://docs.google.com/presentation/d/{presentation_id}")
 
     except Exception as e:
-        flash(f'Error creating Google Slides presentation: {str(e)}')
+        flash(f'Error updating Google Slides presentation: {str(e)}')
         return redirect(url_for('upload_file'))
-
 
 @app.errorhandler(404)
 def page_not_found(e):
