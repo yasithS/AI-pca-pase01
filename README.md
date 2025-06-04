@@ -1,15 +1,18 @@
 # AI PCA Tool
 
-A Flask-based web application for data preprocessing and visualization, designed to help users analyze Excel data through column selection, renaming, and chart generation.
+A Flask-based web application for data preprocessing and visualization, designed to help users analyze Excel data through column selection, renaming, chart generation, and automated Google Slides presentation creation.
 
 ## Features
 
-- **Excel File Upload**: Upload `.xls` and `.xlsx` files
-- **Column Selection**: Choose specific columns from your dataset
-- **Column Renaming**: Rename selected columns for better analysis
-- **Data Visualization**: Generate charts and graphs from your processed data
+- **Excel File Upload**: Support for `.xls` and `.xlsx` files with drag-and-drop interface
+- **Column Management**: Select specific columns and rename them for better analysis
+- **Data Visualization**: Generate interactive bar charts and pie charts from your data
+- **Chart Toggle**: Switch between bar and pie chart views for each column
+- **Google Slides Integration**: Automatically generate presentation slides with your charts
+- **Download Options**: Download individual charts or all charts at once
+- **Modern UI**: Responsive design with smooth animations and intuitive navigation
 - **Session Management**: Maintains user state throughout the workflow
-- **Error Handling**: Custom 404 page and comprehensive error handling
+- **Error Handling**: Comprehensive error handling with custom 404 page
 
 ## Project Structure
 
@@ -18,7 +21,7 @@ AI-pca-pase01/
 ├── app.py                  # Main Flask application
 ├── requirements.txt        # Python dependencies
 ├── README.md               # Project documentation
-├── LICENSE                 # GNU GPL v3 License
+├── LICENSE                 # MIT License
 ├── .gitignore              # Git ignore rules
 ├── .gitattributes          # Git attributes
 ├── templates/              # HTML templates
@@ -27,12 +30,21 @@ AI-pca-pase01/
 │   ├── rename_columns.html # Column renaming page
 │   ├── results.html        # Data processing results
 │   ├── graphs.html         # Chart visualization page
-│   └── 404.html            # Custom error page
+│   └── error_404.html      # Custom error page
 ├── static/                 # Static assets
+│   ├── css/                # Stylesheets
+│   │   ├── upload.css      # Upload page styles
+│   │   ├── columns.css     # Column selection styles
+│   │   ├── graphs.css      # Charts page styles
+│   │   ├── results.css     # Results page styles
+│   │   └── error_404.css   # Error page styles
 │   └── images/
 │       └── 404_error.svg   # Error page illustration
-├── Research/               # Foledr with i-python notebooks
-└── uploads/                # Uploaded files directory (auto-created)
+├── analysis/               # Generated content
+│   ├── charts/             # Chart images (auto-generated)
+│   └── results/            # Analysis results (auto-generated)
+├── uploads/                # Uploaded files directory (auto-created)
+└── credentials.json        # Google API credentials (not included)
 ```
 
 ## Installation
@@ -41,6 +53,7 @@ AI-pca-pase01/
 
 - Python 3.7 or higher
 - pip package manager
+- Google Cloud Console account (for Slides integration)
 
 ### Setup
 
@@ -61,13 +74,20 @@ AI-pca-pase01/
    pip install -r requirements.txt
    ```
 
-4. **Run the application**
+4. **Set up Google API credentials** (for Slides integration)
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
+   - Enable Google Slides API and Google Drive API
+   - Create credentials (OAuth 2.0 Client ID)
+   - Download the credentials file and save as `credentials.json` in the project root
+
+5. **Run the application**
    ```bash
    python app.py
    ```
 
-5. **Access the application**
-   Open your web browser and navigate to `http://localhost:5000/upload`
+6. **Access the application**
+   Open your web browser and navigate to `http://localhost:5000`
 
 ## Dependencies
 
@@ -75,18 +95,21 @@ AI-pca-pase01/
 - **pandas 2.0.3** - Data manipulation and analysis
 - **numpy 1.24.3** - Numerical computing
 - **openpyxl 3.1.2** - Excel file reading/writing
-- **Werkzeug 2.3.7** - WSGI utilities
-- **scikit-learn 1.3.0** - Machine learning library
 - **matplotlib 3.7.2** - Data visualization
 - **seaborn 0.12.2** - Statistical data visualization
-- **pptx 0.6.21** - PowerPoint file handling
+- **google-api-python-client** - Google APIs integration
+- **google-auth-httplib2** - Google authentication
+- **google-auth-oauthlib** - OAuth 2.0 for Google APIs
+- **python-pptx 0.6.21** - PowerPoint file handling
+- **scikit-learn 1.3.0** - Machine learning library
+- **Werkzeug 2.3.7** - WSGI utilities
 
-## Usage
+## Usage Guide
 
 ### Step 1: Upload Excel File
 1. Navigate to the upload page
-2. Select an `.xls` or `.xlsx` file
-3. Click "Upload" to proceed
+2. Drag and drop or click to select an `.xls` or `.xlsx` file
+3. Click "Upload and Continue" to proceed
 
 ### Step 2: Select Columns
 1. Review all available columns from your dataset
@@ -103,77 +126,139 @@ AI-pca-pase01/
 1. Review the processing summary
 2. Check data shape and column mappings
 3. Preview the first 5 rows of processed data
-4. Continue to graph generation
+4. Continue to chart generation
 
-### Step 5: Generate Charts
+### Step 5: Generate and Interact with Charts
 1. View automatically generated charts for each column
-2. Charts include bar plots and pie charts (for country data)
-3. All visualizations are displayed on a single page
+2. Toggle between bar charts and pie charts using the toggle button
+3. Download individual charts or all charts at once
+4. Charts are automatically saved to the `analysis/charts/` directory
+
+### Step 6: Create Google Slides Presentation
+1. Click "Generate the slides" to authorize Google integration
+2. Complete OAuth authorization in your browser
+3. The application automatically creates a presentation with your selected charts
+4. Access your presentation through the provided Google Slides link
 
 ## Chart Types
 
-- **Bar Charts**: Default visualization for most data types
-- **Pie Charts**: Automatically generated for columns named "country"
-- **Value Distribution**: Shows count of unique values in each column
-
-## File Management
-
-- Uploaded files are stored in the `uploads/` directory
-- Processed data is temporarily saved as CSV files
-- Files are managed through Flask sessions
-- Clean up uploaded files periodically to save disk space
-
-## Error Handling
-
-- **404 Errors**: Custom error page with navigation options
-- **File Upload Errors**: Validation for file types and upload issues
-- **Session Management**: Handles expired or invalid sessions
-- **Data Processing Errors**: Comprehensive error messages for debugging
-
-## Development Features
-
-- **Debug Mode**: Enabled by default for development
-- **Session Security**: Secret key for secure session management
-- **Automatic Directory Creation**: Upload folder created automatically
-- **Git Integration**: Configured with `.gitignore` and `.gitattributes`
+- **Bar Charts**: Default visualization showing value counts for each column
+- **Pie Charts**: Alternative visualization showing data distribution as percentages
+- **Interactive Toggle**: Switch between chart types with a single click
+- **High Quality**: All charts generated at high resolution for presentations
 
 ## Configuration
 
 ### Environment Variables
-The application uses a hardcoded secret key. For production, set:
+For production deployment, set the following environment variables:
+```bash
+export SECRET_KEY='your-secure-secret-key-here'
+export FLASK_ENV='production'
+```
+
+### Google Slides Template
+The application uses a predefined Google Slides template. Update the `PRESENTATION_ID` in `app.py`:
 ```python
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+PRESENTATION_ID = "your-google-slides-template-id"
 ```
 
 ### Upload Directory
-Default upload directory is `uploads/`. Modify in `app.py`:
+Default upload directory is `uploads/`. Modify in `app.py` if needed:
 ```python
 UPLOAD_FOLDER = 'your-custom-upload-path'
 ```
 
+## Features Deep Dive
+
+### Modern UI/UX
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
+- **Drag & Drop**: Intuitive file upload with visual feedback
+- **Progress Indicators**: Real-time feedback during file processing
+- **Smooth Animations**: Professional transitions and hover effects
+
+### Data Processing
+- **Robust Excel Parsing**: Handles various Excel formats and structures
+- **Column Validation**: Ensures data integrity throughout the process
+- **Session Management**: Secure handling of user data and preferences
+
+### Google Integration
+- **OAuth 2.0 Security**: Secure authentication with Google services
+- **Automatic Uploads**: Charts uploaded to Google Drive with proper permissions
+- **Template System**: Uses placeholder-based slide generation
+
+## Security Features
+
+- **Session Security**: Encrypted session management
+- **File Validation**: Strict file type checking for uploads
+- **Google OAuth**: Secure authentication for API access
+- **Error Handling**: Graceful handling of errors without exposing sensitive data
+
 ## Future Enhancements
 
-Based on the project name and structure, planned features may include:
-
-- **PCA Analysis**: Principal Component Analysis implementation
+- **PCA Analysis**: Principal Component Analysis implementation (planned)
 - **Advanced Visualizations**: More chart types and interactive plots
-- **Data Export**: Export processed data and charts
+- **Data Export**: Export processed data in multiple formats
 - **Batch Processing**: Handle multiple files simultaneously
-- **User Authentication**: Multi-user support with accounts
+- **User Authentication**: Multi-user support with individual accounts
+- **Cloud Storage**: Integration with multiple cloud storage providers
+
+## Troubleshooting
+
+### Common Issues
+
+**Upload Errors**
+- Ensure file is in `.xls` or `.xlsx` format
+- Check file size (large files may timeout)
+- Verify file is not corrupted or password-protected
+
+**Google Slides Integration**
+- Ensure `credentials.json` is properly configured
+- Check that Google Slides API and Drive API are enabled
+- Verify OAuth consent screen is configured
+
+**Chart Generation**
+- Ensure matplotlib backend is properly configured
+- Check that `analysis/charts/` directory has write permissions
+- Verify data contains valid values for visualization
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for full details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for full details.
 
-## Changelog
+## Contributing
 
-### Current Version
-- Excel file upload and processing
-- Column selection and renaming
-- Basic chart generation
-- Session management
-- Error handling and custom 404 page
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Support
+
+For questions, issues, or suggestions:
+- Create an issue on GitHub
+- Check the troubleshooting section above
+- Review the configuration options
 
 ---
 
-**Note**: This tool is currently in development phase. The PCA analysis feature mentioned in the project name is planned for future releases.
+**Note**: This tool is currently focused on data visualization and Google Slides integration. The PCA analysis feature mentioned in the project name is planned for future releases.
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/yasithS/AI-pca-pase01.git
+cd AI-pca-pase01
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+
+# Add Google credentials (credentials.json)
+# Run the application
+python app.py
+
+# Open http://localhost:5000 in your browser
+```
+
+Ready to transform your Excel data into beautiful visualizations!
