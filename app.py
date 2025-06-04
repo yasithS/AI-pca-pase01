@@ -14,6 +14,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from googleapiclient.http import MediaFileUpload
 
 app = Flask(__name__)
 app.secret_key = 'stringsANDbytes234234'  
@@ -250,7 +251,97 @@ def generate_pptx():
     ppt.save(pptx_path)
 
     return send_file(pptx_path, as_attachment=True)
-    
+
+@app.route('/generate_google_slides', methods=['GET'])
+def generate_google_slides():
+    if 'credentials' not in session:
+        flash('Google authorization required. Please authorize first.')
+        return redirect(url_for('authorize'))
+
+    credentials = Credentials(**session['credentials'])
+    try:
+        drive_service = build('drive', 'v3', credentials=credentials)
+        slides_service = build('slides', 'v1', credentials=credentials)
+
+        chart_dir = os.path.join('analysis', 'charts')
+        if not os.path.exists(chart_dir):
+            flash('Charts not found. Please generate graphs first.')
+            return redirect(url_for('graphs'))
+
+        uploaded_files = []
+        for filename in os.listdir(chart_dir):
+            if not filename.endswith('.png'):
+                continue
+
+            file_path = os.path.join(chart_dir, filename)
+            # 1) Upload the PNG to Drive
+            upload_res = drive_service.files().create(
+                body={'name': filename, 'mimeType': 'image/png'},
+                media_body=MediaFileUpload(file_path, mimetype='image/png'),
+                fields='id'
+            ).execute()
+
+            file_id = upload_res['id']
+
+            # 2) Make it “anyone with link → Reader”
+            drive_service.permissions().create(
+                fileId=file_id,
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+
+            # 3) Build the public “export=view” URL
+            public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+            uploaded_files.append({'id': file_id, 'url': public_url})
+
+        # 4) Create a new blank Slides deck
+        presentation = slides_service.presentations().create(
+            body={'title': 'Generated Charts'}
+        ).execute()
+        presentation_id = presentation['presentationId']
+
+        # 5) Build a batchUpdate that creates one slide per image, then places it
+        requests = []
+        for idx, upload in enumerate(uploaded_files):
+            slide_id = f"slide_{idx+1}"
+            requests.append({
+                'createSlide': {
+                    'objectId': slide_id,
+                    'slideLayoutReference': {'predefinedLayout': 'BLANK'}
+                }
+            })
+            requests.append({
+                'createImage': {
+                    'url': upload['url'],
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'height': {'magnitude': 4000000, 'unit': 'EMU'},
+                            'width':  {'magnitude': 6000000, 'unit': 'EMU'}
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': 1000000,
+                            'translateY': 1000000,
+                            'unit': 'EMU'
+                        }
+                    }
+                }
+            })
+
+        # 6) Finally send the batch update
+        slides_service.presentations().batchUpdate(
+            presentationId=presentation_id,
+            body={'requests': requests}
+        ).execute()
+
+        flash('Google Slides presentation created successfully!')
+        return redirect(f"https://docs.google.com/presentation/d/{presentation_id}")
+
+    except Exception as e:
+        flash(f'Error creating Google Slides presentation: {str(e)}')
+        return redirect(url_for('upload_file'))
+
 
 @app.errorhandler(404)
 def page_not_found(e):
