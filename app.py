@@ -15,6 +15,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
+import logging 
 
 
 app = Flask(__name__)
@@ -29,7 +30,12 @@ SCOPES = ['https://www.googleapis.com/auth/presentations',
           'openid',
           'https://www.googleapis.com/auth/userinfo.email']
 
-PRESENTATION_ID = "1JOO0NCYTGQIz-aQCi_a0Q9NJAeZ3JvakwUyxB6bcrAc"
+# presentation ID  
+PRESENTATION_ID = "1nP1VA5rNflyb3IgxhI7hv3-2K6WHufM4qLOaZg2qUDI"
+# 1JOO0NCYTGQIz-aQCi_a0Q9NJAeZ3JvakwUyxB6bcrAc
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @app.route('/authorize')
 def authorize():
@@ -153,7 +159,8 @@ def rename_columns():
         flash(f'Error processing file: {str(e)}')
         return redirect(url_for('upload_file'))
     
-    
+
+# creating graphs from the processed data 
 @app.route('/create_graphs', methods=['GET'])
 def graphs():
     csv_path = session.get('processed_csv_path')
@@ -184,7 +191,6 @@ def graphs():
         ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
         ax_bar.set_xlabel(single)
         ax_bar.set_ylabel('Count')
-        # ax_bar.set_title(f"Performance by {single}")
         plt.xticks(rotation=90)
         plt.tight_layout()
         img_bar = io.BytesIO()
@@ -201,7 +207,6 @@ def graphs():
         # Pie chart
         fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
         ax_pie.pie(y, labels=x, autopct='%1.1f%%')
-        # ax_pie.set_title(f'Performance by {single}')
         plt.tight_layout()
         img_pie = io.BytesIO()
         plt.savefig(img_pie, format='png')
@@ -242,35 +247,46 @@ def update_selected_graph_type():
 
 @app.route('/slides', methods=['GET'])
 def slides():
+    logging.info("Accessing /slides route.")
+    
     if 'credentials' not in session:
+        logging.warning("Google authorization required. Credentials not found in session.")
         flash('Google authorization required. Please authorize first.')
         return redirect(url_for('authorize'))
 
     credentials = Credentials(**session['credentials'])
     try:
+        logging.info("Building Google Drive and Slides services.")
         drive_service = build('drive', 'v3', credentials=credentials)
         slides_service = build('slides', 'v1', credentials=credentials)
 
         chart_dir = os.path.join('analysis', 'charts')
         if not os.path.exists(chart_dir):
+            logging.warning("Charts directory not found.")
             flash('Charts not found. Please generate graphs first.')
             return redirect(url_for('graphs'))
 
-        # Get selected graph types from session
         selected_graph_types = session.get('selected_graph_types', {})
         if not selected_graph_types:
+            logging.warning("No graph types selected.")
             flash('No graph types selected. Please select graphs first.')
             return redirect(url_for('graphs'))
 
         uploaded_files = []
         for column, graph_type in selected_graph_types.items():
+
+            if column.lower() == 'country':
+                graph_type = 'pie'
+
+            
             filename = f"{column}_{graph_type}.png"
             file_path = os.path.join(chart_dir, filename)
             if not os.path.exists(file_path):
+                logging.error(f"Graph file {filename} not found.")
                 flash(f"Graph file {filename} not found.")
                 continue
 
-            # 1) Upload the PNG to Drive
+            logging.info(f"Uploading {filename} to Google Drive.")
             upload_res = drive_service.files().create(
                 body={'name': filename, 'mimeType': 'image/png'},
                 media_body=MediaFileUpload(file_path, mimetype='image/png'),
@@ -278,39 +294,47 @@ def slides():
             ).execute()
 
             file_id = upload_res['id']
+            logging.info(f"File uploaded successfully. File ID: {file_id}")
 
-            # 2) Make it “anyone with link → Reader”
             drive_service.permissions().create(
                 fileId=file_id,
                 body={'role': 'reader', 'type': 'anyone'}
             ).execute()
 
-            # 3) Build the public “export=view” URL
             public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
             uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename, 'column': column})
 
-        # 4) Open the existing Google Slides template
+        logging.info("Opening Google Slides template.")
         presentation_id = PRESENTATION_ID  
         presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
 
-        # 5) Prepare batchUpdate requests to replace placeholders with images and titles
         requests = []
-        for idx, upload in enumerate(uploaded_files):
-            chart_title = f"Performance by {upload['column']}"
-            placeholder_title = f"{{{{SLIDE{idx+1}_TITLE}}}}"
-            placeholder_chart = f"{{{{CHART{idx+1}}}}}"
+        for upload in uploaded_files:
+            column = upload['column']
+            chart_title = f"Performance by {column}"
+            placeholder_chart = f"{{{{DSCOUNTRY}}}}" if column.lower() == 'country' else f"{{{{DSCHART{uploaded_files.index(upload)+1}}}}}"
+
+            if column.lower() != 'country':
+                chart_title = f"Performance by {column}"
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': '{{DSTITLE}}',
+                            'matchCase': True
+                        },
+                        'replaceText': chart_title
+                    }
+                })
+
+
             slide_id = None
 
-            # Find the slide containing the placeholders
             for slide in presentation['slides']:
                 for element in slide.get('pageElements', []):
                     if 'shape' in element and 'text' in element['shape']:
                         text_content = element['shape']['text']['textElements']
                         for text_element in text_content:
                             if 'textRun' in text_element:
-                                if placeholder_title in text_element['textRun']['content']:
-                                    slide_id = slide['objectId']
-                                    break
                                 if placeholder_chart in text_element['textRun']['content']:
                                     slide_id = slide['objectId']
                                     break
@@ -320,18 +344,7 @@ def slides():
                     break
 
             if slide_id:
-                # Replace placeholder title
-                requests.append({
-                    'replaceAllText': {
-                        'containsText': {
-                            'text': placeholder_title,
-                            'matchCase': True
-                        },
-                        'replaceText': chart_title
-                    }
-                })
-
-                # Replace placeholder chart with an image
+                logging.info(f"Replacing placeholders on slide ID: {slide_id}")
                 requests.append({
                     'replaceAllText': {
                         'containsText': {
@@ -347,8 +360,8 @@ def slides():
                         'elementProperties': {
                             'pageObjectId': slide_id,
                             'size': {
-                                'height': {'magnitude': 4000000, 'unit': 'EMU'},
-                                'width': {'magnitude': 6000000, 'unit': 'EMU'}
+                                'height': {'magnitude': 3000000, 'unit': 'EMU'},
+                                'width': {'magnitude': 4000000, 'unit': 'EMU'}
                             },
                             'transform': {
                                 'scaleX': 1,
@@ -361,16 +374,18 @@ def slides():
                     }
                 })
 
-        # 6) Send the batchUpdate request
+        logging.info("Sending batchUpdate request to Google Slides.")
         slides_service.presentations().batchUpdate(
             presentationId=presentation_id,
             body={'requests': requests}
         ).execute()
 
+        logging.info("Google Slides presentation updated successfully.")
         flash('Google Slides presentation updated successfully!')
         return redirect(f"https://docs.google.com/presentation/d/{presentation_id}")
 
     except Exception as e:
+        logging.error(f"Error updating Google Slides presentation: {str(e)}")
         flash(f'Error updating Google Slides presentation: {str(e)}')
         return redirect(url_for('upload_file'))
     
