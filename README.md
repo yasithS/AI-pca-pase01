@@ -262,3 +262,9 @@ python app.py
 ```
 
 Ready to transform your Excel data into beautiful visualizations!
+
+
+### in case of InsecureTransportError use this 
+```
+export OAUTHLIB_INSECURE_TRANSPORT=1
+```
