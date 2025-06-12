@@ -3,49 +3,39 @@ import pandas as pd
 import numpy as np
 import os
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
 import io
 import base64
 from pptx import Presentation
 from pptx.util import Inches, Pt
 import pickle
-import logging
-from flask import Flask, request, render_template, redirect, url_for, session, flash
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from io import BytesIO
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.http import MediaFileUpload
+import logging 
+
 
 app = Flask(__name__)
-app.secret_key = 'stringsANDbytes234234'
+app.secret_key = 'stringsANDbytes234234'  
 
-# folders
 UPLOAD_FOLDER = 'uploads'
-CHART_FOLDER = os.path.join('analysis', 'charts')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(CHART_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# OAuth scopes (added readonly scopes)
-SCOPES = [
-    'openid',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/drive.readonly',
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
-    'https://www.googleapis.com/auth/presentations',
-    'https://www.googleapis.com/auth/drive.file'
-]
+SCOPES = ['https://www.googleapis.com/auth/presentations', 
+          'https://www.googleapis.com/auth/drive.file',
+          'openid',
+          'https://www.googleapis.com/auth/userinfo.email']
 
-# Presentation ID
+# presentation ID  
 PRESENTATION_ID = "1nP1VA5rNflyb3IgxhI7hv3-2K6WHufM4qLOaZg2qUDI"
+# 1JOO0NCYTGQIz-aQCi_a0Q9NJAeZ3JvakwUyxB6bcrAc
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 @app.route('/authorize')
 def authorize():
@@ -54,17 +44,16 @@ def authorize():
         scopes=SCOPES,
         redirect_uri=url_for('oauth2callback', _external=True)
     )
-    auth_url, state = flow.authorization_url(
+    authorization_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true'
     )
     session['state'] = state
-    return redirect(auth_url)
-
+    return redirect(authorization_url)
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    state = session.get('state')
+    state = session['state']
     flow = Flow.from_client_secrets_file(
         'credentials.json',
         scopes=SCOPES,
@@ -72,375 +61,337 @@ def oauth2callback():
         redirect_uri=url_for('oauth2callback', _external=True)
     )
     flow.fetch_token(authorization_response=request.url)
-    creds = flow.credentials
+
+    credentials = flow.credentials
 
     session['credentials'] = {
-        'token': creds.token,
-        'refresh_token': creds.refresh_token,
-        'token_uri': creds.token_uri,
-        'client_id': creds.client_id,
-        'client_secret': creds.client_secret,
-        'scopes': creds.scopes
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
     }
-    logging.info("Google authorization successful!")
-    return redirect(url_for('upload_file'))
-
-@app.route('/need_login')
-def need_login():
-    return render_template('need_login.html')
-
-@app.route('/reset')
-def reset():
-    # remove everything related to the last upload
-    for key in ['file_path', 'file_name', 'processed_csv_path', 
-                'selected_columns', 'selected_graph_types']:
-        session.pop(key, None)
-    return redirect(url_for('upload_file'))
-
-
-@app.route('/picker_token')
-def picker_token():
-    if 'credentials' not in session:
-        return redirect(url_for('need_login'))
-        # return jsonify({}), 401
-    creds = Credentials(**session['credentials'])
-    return jsonify(token=creds.token)
-
-@app.route('/drive_browser', methods=['GET'])
-def drive_browser():
-    if 'credentials' not in session:
-        return redirect(url_for('need_login'))
-
-    creds = Credentials(**session['credentials'])
-    drive = build('drive', 'v3', credentials=creds)
-
-    # allow folder_id via ?folder_id=… so you can drill down
-    folder_id = request.args.get(
-        'folder_id',
-        '1z72ZZSiSTGyXH_BmbaO6IB2jkvkpSkEJ'
-    )
-
-    # 1) sub-folders
-    folder_q = (
-        f"'{folder_id}' in parents and "
-        "mimeType='application/vnd.google-apps.folder' and trashed=false"
-    )
-    folders = drive.files().list(
-        q=folder_q,
-        fields='files(id,name)',
-        includeItemsFromAllDrives=True,
-        supportsAllDrives=True
-    ).execute().get('files', [])
-
-    # 2) .xlsx files
-    file_q = (
-        f"'{folder_id}' in parents and "
-        "mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and trashed=false"
-    )
-    files = drive.files().list(
-        q=file_q,
-        fields='files(id,name)',
-        includeItemsFromAllDrives=True,
-        supportsAllDrives=True
-    ).execute().get('files', [])
-
-    return render_template(
-        'drive_browser.html',
-        folders=folders,
-        files=files,
-        folder_id=folder_id
-    )
-
-
-@app.route('/select_drive_file', methods=['POST'])
-def select_drive_file():
-    if 'credentials' not in session:
-        return redirect(url_for('need_login'))
-
-    # 1) grab the file_id, not the folder_id
-    file_id = request.form.get('file_id')
-    if not file_id:
-        flash('No file selected.')
-        return redirect(url_for('drive_browser'))
-
-    creds = Credentials(**session['credentials'])
-    drive_svc = build('drive', 'v3', credentials=creds)
-
-    # 2) download the file bytes (include supportsAllDrives if it's a shared folder)
-    request_media = drive_svc.files().get_media(
-        fileId=file_id,
-        supportsAllDrives=True
-    )
-    fh = BytesIO()
-    downloader = MediaIoBaseDownload(fh, request_media)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    fh.seek(0)
-
-    # 3) fetch the real filename
-    meta = drive_svc.files().get(
-        fileId=file_id,
-        fields='name',
-        supportsAllDrives=True
-    ).execute()
-    filename = meta.get('name', f"{file_id}.xlsx")
-
-    # 4) save locally and push into your existing flow
-    local_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    with open(local_path, 'wb') as f:
-        f.write(fh.read())
-
-    session['file_path'] = local_path
-    session['file_name'] = filename
+    print('Google authorization successful!')
 
     return redirect(url_for('upload_file'))
-
-
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    # 1) Handle new upload
     if request.method == 'POST':
         file = request.files.get('excel_file')
-        if not file or not file.filename:
+        if not file or file.filename == '':
             return redirect(request.url)
-
-        path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(path)
+        
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        file.save(file_path)
 
         try:
-            df = pd.read_excel(path, engine='openpyxl')
+            df = pd.read_excel(file_path, engine='openpyxl')
         except Exception as e:
-            flash(f"Error reading Excel: {e}")
+            print(f"Error reading the Excel file: {e}")
             return redirect(request.url)
-
-        session['file_path'] = path
+        
+        columns = list(df.columns)
+        
+        # Store file info in session
         session['file_name'] = file.filename
-        # redirect to GET so browser’s refresh won’t re-POST
-        return redirect(url_for('upload_file'))
-
-    # 2) If we already have a file in session, show the column picker
-    elif session.get('file_path'):
-        df = pd.read_excel(session['file_path'], engine='openpyxl')
-        return render_template(
-            'columns.html',
-            columns=list(df.columns),
-            file_name=session.get('file_name')
-        )
+        session['file_path'] = file_path
+        return render_template('columns.html', columns=columns, file_name=file.filename)
     
-
-    # 3) Otherwise show the upload form
     return render_template('upload.html')
-
-
 
 @app.route('/select_columns', methods=['POST'])
 def select_columns():
-    cols = request.form.getlist('columns')
-    if not cols:
-        flash('Select at least one column.')
+    selected_columns = request.form.getlist('columns')
+    if not selected_columns:
+        flash('Please select at least one column')
         return redirect(url_for('upload_file'))
-    session['selected_columns'] = cols
-    return render_template('rename_columns.html', columns=cols)
-
+    
+    # Store selected columns in session
+    session['selected_columns'] = selected_columns
+    return render_template('rename_columns.html', columns=selected_columns)
 
 @app.route('/rename_columns', methods=['POST'])
 def rename_columns():
-    cols = session.get('selected_columns')
-    path = session.get('file_path')
-    if not cols or not path:
-        flash('Session expired. Start over.')
+    selected_columns = session.get('selected_columns', [])
+    file_path = session.get('file_path', '')
+    
+    if not selected_columns or not file_path:
+        flash('Session expired. Please start over.')
         return redirect(url_for('upload_file'))
-
-    mapping = {}
-    for old in cols:
-        new = request.form.get(f'rename_{old}', old).strip()
-        if new:
-            mapping[old] = new
-
+    
+    # Get the new column names from form
+    column_mapping = {}
+    for old_name in selected_columns:
+        new_name = request.form.get(f'rename_{old_name}', old_name)
+        if new_name.strip():  # Only rename if new name is not empty
+            column_mapping[old_name] = new_name.strip()
+    
     try:
-        df = pd.read_excel(path, engine='openpyxl')
-        df_filtered = df[cols].copy()
-        if mapping:
-            df_filtered.rename(columns=mapping, inplace=True)
-
-        info = {
-            'original_columns': cols,
+        # Read the Excel file and process selected columns
+        df = pd.read_excel(file_path, engine='openpyxl')
+        
+        # Filter to only selected columns
+        df_filtered = df[selected_columns].copy()
+        
+        # Rename columns
+        if column_mapping:
+            df_filtered.rename(columns=column_mapping, inplace=True)
+        
+        # just display the processed data info
+        processed_info = {
+            'original_columns': selected_columns,
             'renamed_columns': list(df_filtered.columns),
             'data_shape': df_filtered.shape,
-            'column_mapping': mapping
+            'column_mapping': column_mapping
         }
 
-        temp_csv = os.path.join(app.config['UPLOAD_FOLDER'], 'processed.csv')
-        df_filtered.to_csv(temp_csv, index=False)
-        session['processed_csv_path'] = temp_csv
-
-        return render_template(
-            'results.html',
-            processed_info=info,
-            data_preview=df_filtered.head().to_html(classes='table table-striped')
-        )
+        temp_csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'processed.csv')
+        df_filtered.to_csv(temp_csv_path, index=False)
+        session['processed_csv_path'] = temp_csv_path
+        
+        return render_template('results.html', 
+                             processed_info=processed_info,
+                             data_preview=df_filtered.head().to_html(classes='table table-striped'))
+    
     except Exception as e:
-        flash(f"Error processing file: {e}")
+        flash(f'Error processing file: {str(e)}')
         return redirect(url_for('upload_file'))
+    
 
-
+# creating graphs from the processed data 
 @app.route('/create_graphs', methods=['GET'])
-def create_graphs():
+def graphs():
     csv_path = session.get('processed_csv_path')
     if not csv_path or not os.path.exists(csv_path):
-        flash('Processed data not found.')
+        flash('Processed data not found. Please restart.')
         return redirect(url_for('upload_file'))
 
-    df = pd.read_csv(csv_path)
-    cols = df.columns.tolist()
-
-    # clear old charts
-    for f in os.listdir(CHART_FOLDER):
-        if f.endswith('.png'):
-            os.remove(os.path.join(CHART_FOLDER, f))
+    df_filtered = pd.read_csv(csv_path)
+    selected_columns = df_filtered.columns.tolist()
 
     charts = []
-    for col in cols:
-        counts = df[col].value_counts()
-        labels = counts.index.tolist()
-        values = counts.values.tolist()
+    chart_dir = os.path.join('analysis', 'charts')
+    os.makedirs(chart_dir, exist_ok=True)
 
-        # bar
-        fig, ax = plt.subplots(figsize=(5,5))
-        ax.bar(labels, values, edgecolor='black', width=0.7, alpha=0.7)
-        ax.set_xlabel(col)
-        ax.set_ylabel('Count')
+    # Remove old chart images before saving new ones
+    for filename in os.listdir(chart_dir):
+        file_path = os.path.join(chart_dir, filename)
+        if os.path.isfile(file_path) and filename.endswith('.png'):
+            os.remove(file_path)
+
+    for single in selected_columns:
+        data = df_filtered[single].value_counts()
+        x = data.index.tolist()
+        y = data.values.tolist()
+
+        # Bar chart
+        fig_bar, ax_bar = plt.subplots(figsize=(5, 5))
+        ax_bar.bar(x, y, edgecolor='black', width=0.7, alpha=0.7, color=plt.cm.viridis(np.linspace(0, 1, len(x))))
+        ax_bar.set_xlabel(single)
+        ax_bar.set_ylabel('Count')
         plt.xticks(rotation=90)
         plt.tight_layout()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        plt.close(fig)
-        with open(os.path.join(CHART_FOLDER, f"{col}_bar.png"), 'wb') as imgf:
-            imgf.write(buf.getvalue())
+        img_bar = io.BytesIO()
+        plt.savefig(img_bar, format='png')
+        img_bar.seek(0)
+        base64_bar = base64.b64encode(img_bar.getvalue()).decode()
+        plt.close(fig_bar)
 
-        # pie
-        fig2, ax2 = plt.subplots(figsize=(5,5))
-        ax2.pie(values, labels=labels, autopct='%1.1f%%')
+        # Save bar chart as file
+        bar_path = os.path.join(chart_dir, f"{single}_bar.png")
+        with open(bar_path, "wb") as f:
+            f.write(img_bar.getvalue())
+
+        # Pie chart
+        fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
+        ax_pie.pie(y, labels=x, autopct='%1.1f%%')
         plt.tight_layout()
-        buf2 = io.BytesIO()
-        plt.savefig(buf2, format='png')
-        buf2.seek(0)
-        b64_pie = base64.b64encode(buf2.getvalue()).decode()
-        plt.close(fig2)
-        with open(os.path.join(CHART_FOLDER, f"{col}_pie.png"), 'wb') as imgf:
-            imgf.write(buf2.getvalue())
+        img_pie = io.BytesIO()
+        plt.savefig(img_pie, format='png')
+        img_pie.seek(0)
+        base64_pie = base64.b64encode(img_pie.getvalue()).decode()
+        plt.close(fig_pie)
 
-        charts.append({'column': col, 'bar': b64, 'pie': b64_pie})
+        # Save pie chart as file
+        pie_path = os.path.join(chart_dir, f"{single}_pie.png")
+        with open(pie_path, "wb") as f:
+            f.write(img_pie.getvalue())
+
+        charts.append({
+            'column': single,
+            'bar': base64_bar,
+            'pie': base64_pie
+        })
 
     return render_template('graphs.html', charts=charts)
-
 
 @app.route('/update_selected_graph_type', methods=['POST'])
 def update_selected_graph_type():
     data = request.get_json()
-    col = data.get('column')
-    gt = data.get('graphType')
-    if not col or not gt:
-        return jsonify(error='Invalid data'), 400
-    session.setdefault('selected_graph_types', {})[col] = gt
-    session.modified = True
-    return jsonify(success=True)
+    column = data.get('column')
+    graph_type = data.get('graphType')
 
+    if not column or not graph_type:
+        return jsonify({'error': 'Invalid data'}), 400
+
+    # Update session with selected graph type
+    if 'selected_graph_types' not in session:
+        session['selected_graph_types'] = {}
+
+    session['selected_graph_types'][column] = graph_type
+    session.modified = True  # Mark session as modified to ensure changes are saved
+
+    return jsonify({'success': True})
 
 @app.route('/slides', methods=['GET'])
 def slides():
+    logging.info("Accessing /slides route.")
+    
     if 'credentials' not in session:
-        return redirect(url_for('need_login'))
+        logging.warning("Google authorization required. Credentials not found in session.")
+        flash('Google authorization required. Please authorize first.')
+        return redirect(url_for('authorize'))
 
-    creds = Credentials(**session['credentials'])
-    drive_svc = build('drive', 'v3', credentials=creds)
-    slides_svc = build('slides', 'v1', credentials=creds)
+    credentials = Credentials(**session['credentials'])
+    try:
+        logging.info("Building Google Drive and Slides services.")
+        drive_service = build('drive', 'v3', credentials=credentials)
+        slides_service = build('slides', 'v1', credentials=credentials)
 
-    # ensure charts exist
-    if not os.path.isdir(CHART_FOLDER):
-        flash('Generate graphs first.')
-        return redirect(url_for('create_graphs'))
+        chart_dir = os.path.join('analysis', 'charts')
+        if not os.path.exists(chart_dir):
+            logging.warning("Charts directory not found.")
+            flash('Charts not found. Please generate graphs first.')
+            return redirect(url_for('graphs'))
 
-    sel = session.get('selected_graph_types', {})
-    if not sel:
-        flash('Select graphs first.')
-        return redirect(url_for('create_graphs'))
+        selected_graph_types = session.get('selected_graph_types', {})
+        if not selected_graph_types:
+            logging.warning("No graph types selected.")
+            flash('No graph types selected. Please select graphs first.')
+            return redirect(url_for('graphs'))
 
-    uploaded = []
-    for col, gt in sel.items():
-        fname = f"{col}_{gt}.png"
-        path = os.path.join(CHART_FOLDER, fname)
-        if not os.path.exists(path):
-            logging.error(f"{fname} missing")
-            flash(f"{fname} not found")
-            continue
+        uploaded_files = []
+        for column, graph_type in selected_graph_types.items():
 
-        res = drive_svc.files().create(
-            body={'name': fname, 'mimeType': 'image/png'},
-            media_body=MediaFileUpload(path, mimetype='image/png'),
-            fields='id'
-        ).execute()
-        fid = res['id']
-        drive_svc.permissions().create(
-            fileId=fid,
-            body={'role': 'reader', 'type': 'anyone'}
-        ).execute()
-        url = f"https://drive.google.com/uc?export=view&id={fid}"
-        uploaded.append({'column': col, 'url': url})
+            if column.lower() == 'country':
+                graph_type = 'pie'
 
-    pres = slides_svc.presentations().get(presentationId=PRESENTATION_ID).execute()
-    requests = []
-    for idx, up in enumerate(uploaded, start=1):
-        placeholder = f"{{{{DSCHART{idx}}}}}"
-        # find slide with placeholder
-        slide_id = None
-        for s in pres['slides']:
-            for el in s.get('pageElements', []):
-                txt = el.get('shape', {}).get('text', {}).get('textElements', [])
-                if any(placeholder in (t.get('textRun', {}).get('content','')) for t in txt):
-                    slide_id = s['objectId']
-                    break
-            if slide_id:
-                break
+            
+            filename = f"{column}_{graph_type}.png"
+            file_path = os.path.join(chart_dir, filename)
+            if not os.path.exists(file_path):
+                logging.error(f"Graph file {filename} not found.")
+                flash(f"Graph file {filename} not found.")
+                continue
 
-        if slide_id:
-            # clear placeholder
-            requests.append({
-                'replaceAllText': {
-                    'containsText': {'text': placeholder, 'matchCase': True},
-                    'replaceText': ''
-                }
-            })
-            # insert image
-            requests.append({
-                'createImage': {
-                    'url': up['url'],
-                    'elementProperties': {
-                        'pageObjectId': slide_id,
-                        'size': {'height': {'magnitude':3000000,'unit':'EMU'},
-                                 'width':  {'magnitude':4000000,'unit':'EMU'}},
-                        'transform': {'scaleX':1,'scaleY':1,'translateX':1000000,'translateY':1000000,'unit':'EMU'}
+            logging.info(f"Uploading {filename} to Google Drive.")
+            upload_res = drive_service.files().create(
+                body={'name': filename, 'mimeType': 'image/png'},
+                media_body=MediaFileUpload(file_path, mimetype='image/png'),
+                fields='id'
+            ).execute()
+
+            file_id = upload_res['id']
+            logging.info(f"File uploaded successfully. File ID: {file_id}")
+
+            drive_service.permissions().create(
+                fileId=file_id,
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+
+            public_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+            uploaded_files.append({'id': file_id, 'url': public_url, 'name': filename, 'column': column})
+
+        logging.info("Opening Google Slides template.")
+        presentation_id = PRESENTATION_ID  
+        presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
+
+        requests = []
+        for upload in uploaded_files:
+            column = upload['column']
+            chart_title = f"Performance by {column}"
+            placeholder_chart = f"{{{{DSCOUNTRY}}}}" if column.lower() == 'country' else f"{{{{DSCHART{uploaded_files.index(upload)+1}}}}}"
+
+            if column.lower() != 'country':
+                chart_title = f"Performance by {column}"
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': '{{DSTITLE}}',
+                            'matchCase': True
+                        },
+                        'replaceText': chart_title
                     }
-                }
-            })
-
-    slides_svc.presentations().batchUpdate(
-        presentationId=PRESENTATION_ID,
-        body={'requests': requests}
-    ).execute()
-
-    flash('Slides updated!')
-    return redirect(f"https://docs.google.com/presentation/d/{PRESENTATION_ID}")
+                })
 
 
+            slide_id = None
+
+            for slide in presentation['slides']:
+                for element in slide.get('pageElements', []):
+                    if 'shape' in element and 'text' in element['shape']:
+                        text_content = element['shape']['text']['textElements']
+                        for text_element in text_content:
+                            if 'textRun' in text_element:
+                                if placeholder_chart in text_element['textRun']['content']:
+                                    slide_id = slide['objectId']
+                                    break
+                    if slide_id:
+                        break
+                if slide_id:
+                    break
+
+            if slide_id:
+                logging.info(f"Replacing placeholders on slide ID: {slide_id}")
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {
+                            'text': placeholder_chart,
+                            'matchCase': True
+                        },
+                        'replaceText': ''  # Clear the placeholder text
+                    }
+                })
+                requests.append({
+                    'createImage': {
+                        'url': upload['url'],
+                        'elementProperties': {
+                            'pageObjectId': slide_id,
+                            'size': {
+                                'height': {'magnitude': 3000000, 'unit': 'EMU'},
+                                'width': {'magnitude': 4000000, 'unit': 'EMU'}
+                            },
+                            'transform': {
+                                'scaleX': 1,
+                                'scaleY': 1,
+                                'translateX': 1000000,
+                                'translateY': 1000000,
+                                'unit': 'EMU'
+                            }
+                        }
+                    }
+                })
+
+        logging.info("Sending batchUpdate request to Google Slides.")
+        slides_service.presentations().batchUpdate(
+            presentationId=presentation_id,
+            body={'requests': requests}
+        ).execute()
+
+        logging.info("Google Slides presentation updated successfully.")
+        flash('Google Slides presentation updated successfully!')
+        return redirect(f"https://docs.google.com/presentation/d/{presentation_id}")
+
+    except Exception as e:
+        logging.error(f"Error updating Google Slides presentation: {str(e)}")
+        flash(f'Error updating Google Slides presentation: {str(e)}')
+        return redirect(url_for('upload_file'))
+    
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('error_404.html'), 404
-
 
 if __name__ == '__main__':
     app.run(debug=True)
