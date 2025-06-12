@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login Required</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .btn {
+      padding: .75rem 1.5rem;
+      background: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome to AI PCA Tool</h1>
+  <p>You must be signed in with Google to continue.</p>
+  <a class="btn" href="{{ url_for('authorize') }}">Go to Login</a>
+</body>
+</html>
